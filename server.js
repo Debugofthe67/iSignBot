@@ -15,10 +15,19 @@ if (!fs.existsSync(TMP_DIR)) {
     fs.mkdirSync(TMP_DIR, { recursive: true });
 }
 
+// Locate this block in server.js and replace it with this dynamic version:
 app.use(express.static(__dirname));
-app.get('/', (req, res) => {
+
+// FIXED: Handles standard root (/) AND nested cloud-proxy paths seamlessly
+app.get(['/', '/*'], (req, res, next) => {
+    // If the browser is asking for an asset file (like .js, .css, .png), pass it along
+    if (path.extname(req.path)) {
+        return next();
+    }
+    // Otherwise, always force load your clean dashboard interface
     res.sendFile(path.join(__dirname, 'index.html'));
 });
+
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
