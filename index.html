@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iSignBot Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #151d30;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border: #24324f;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 40px 20px; }
+        .container { background-color: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 30px; width: 100%; max-width: 600px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); }
+        h1 { font-size: 26px; margin-bottom: 4px; text-align: center; letter-spacing: -0.5px; }
+        p.subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; }
+        .section-title { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; margin: 20px 0 10px 0; letter-spacing: 1px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+        .dropzone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
+        .dropzone-full { grid-column: span 2; }
+        .drop-box { border: 2px dashed var(--border); border-radius: 10px; padding: 16px; text-align: center; background-color: rgba(11, 15, 25, 0.4); cursor: pointer; transition: all 0.2s ease; position: relative; }
+        .drop-box:hover, .drop-box.dragover { border-color: var(--accent); background-color: rgba(59, 130, 246, 0.05); }
+        .drop-box p { font-size: 13px; color: var(--text-main); font-weight: 500; }
+        .drop-box span { font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px; word-break: break-all; }
+        .drop-box input[type="file"] { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group.full { grid-column: span 2; }
+        label { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-muted); text-transform: uppercase; }
+        input[type="text"], input[type="password"] { background-color: var(--bg-color); border: 1px solid var(--border); color: var(--text-main); padding: 10px; border-radius: 8px; font-size: 14px; outline: none; transition: border 0.2s; }
+        input[type="text"]:focus, input[type="password"]:focus { border-color: var(--accent); }
+        .toggle-group { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+        .toggle-group input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+        .toggle-group span { font-size: 13px; color: var(--text-main); cursor: pointer; }
+        button { width: 100%; background-color: var(--accent); color: white; border: none; padding: 14px; font-size: 16px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s; margin-top: 15px; }
+        button:hover { background-color: var(--accent-hover); }
+        button:disabled { background-color: var(--border); color: var(--text-muted); cursor: not-allowed; }
+        #progressContainer { margin-top: 20px; padding: 15px; border-radius: 8px; background-color: var(--bg-color); border: 1px solid var(--border); display: none; }
+        .progress-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+        .progress-bar-bg { width: 100%; height: 8px; background-color: var(--border); border-radius: 4px; overflow: hidden; }
+        .progress-bar-fill { width: 0%; height: 100%; background-color: var(--accent); transition: width 0.1s ease; }
+        #statusText { font-size: 12px; color: var(--text-muted); margin-top: 8px; text-align: center; }
+        .actions-box { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+        .btn-action { display: block; text-align: center; padding: 12px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; }
+        .btn-download { background-color: var(--border); color: var(--text-main); }
+        .btn-install { background-color: var(--success); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>iSignBot</h1>
+    <p class="subtitle">Beta 2 Engine — Ephemeral Cloud Signing Terminal</p>
+    
+    <form id="signForm">
+        <div class="section-title">Required Binaries</div>
+        <div class="dropzone-grid">
+            <div class="drop-box dropzone-full">
+                <p>Select Application Bundle (.IPA)</p>
+                <span id="ipa-label">Drag & drop or tap to browse</span>
+                <input type="file" id="ipa" accept=".ipa" required>
+            </div>
+            <div class="drop-box">
+                <p>Mobile Provision</p>
+                <span id="prov-label">Drop profile</span>
+                <input type="file" id="prov" accept=".mobileprovision" required>
+            </div>
+            <div class="drop-box">
+                <p>P12 Certificate</p>
+                <span id="p12-label">Drop cert</span>
+                <input type="file" id="p12" accept=".p12" required>
+            </div>
+        </div>
+
+        <div class="section-title">Optional Tweak Injection</div>
+        <div class="drop-box dropzone-full" style="margin-bottom:15px;">
+            <p>Inject Tweak Mod Files (.DYLIB / .DEB)</p>
+            <span id="tweaks-label">Select multiple files if needed (Optional)</span>
+            <input type="file" id="tweaks" accept=".dylib,.deb" multiple>
+        </div>
+
+        <div class="section-title">Mod Configuration Options</div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Custom App Name</label>
+                <input type="text" id="appName" placeholder="Keep original name">
+            </div>
+            <div class="form-group">
+                <label>Custom Bundle Identifier</label>
+                <input type="text" id="bundleId" placeholder="Keep original ID">
+            </div>
+            <div class="form-group">
+                <label>P12 Bundle Password</label>
+                <input type="password" id="password" placeholder="Empty if no password">
+            </div>
+            <div class="form-group" style="justify-content: center;">
+                <div class="toggle-group">
+                    <input type="checkbox" id="stripEntitlements" checked>
+                    <span onclick="document.getElementById('stripEntitlements').click()">Clean Entitlements (Fix Crashes)</span>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" id="submitBtn">Sign Custom Build</button>
+    </form>
+
+    <div id="progressContainer">
+        <div class="progress-label">
+            <span id="progressStage">Uploading to sandboxed server...</span>
+            <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+        <div id="statusText">Initial connection pending...</div>
+    </div>
+</div>
+
+<script>
+    const setupLabelSync = (inputId, labelId, defaultText) => {
+        const input = document.getElementById(inputId);
+        const label = document.getElementById(labelId);
+        if (!input || !label) return;
+        
+        ['dragenter', 'dragover'].forEach(name => {
+            input.addEventListener(name, () => input.parentElement.classList.add('dragover'));
+        });
+        ['dragleave', 'drop'].forEach(name => {
+            input.addEventListener(name, () => input.parentElement.classList.remove('dragover'));
+        });
+
+        input.addEventListener('change', () => {
+            if (input.files.length === 1) {
+                label.innerText = input.files[0].name;
+                label.style.color = 'var(--accent)';
+            } else if (input.files.length > 1) {
+                label.innerText = input.files.length + " tweak files ready";
+                label.style.color = 'var(--warning)';
+            } else {
+                label.innerText = defaultText;
+                label.style.color = 'var(--text-muted)';
+            }
+        });
+    };
+
+    setupLabelSync('ipa', 'ipa-label', 'Drag & drop or tap to browse');
+    setupLabelSync('prov', 'prov-label', 'Drop profile');
+    setupLabelSync('p12', 'p12-label', 'Drop cert');
+    setupLabelSync('tweaks', 'tweaks-label', 'Select multiple files if needed (Optional)');
+
+    const entLabel = document.getElementById('entitleLabel');
+    if (entLabel) {
+        entLabel.addEventListener('click', () => {
+            const cb = document.getElementById('stripEntitlements');
+            if (cb) cb.click();
+        });
+    }
+
+    document.getElementById('signForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const progressStage = document.getElementById('progressStage');
+        const statusText = document.getElementById('statusText');
+
+        const formData = new FormData();
+        const ipaInput = document.getElementById('ipa');
+        const provInput = document.getElementById('prov');
+        const p12Input = document.getElementById('p12');
+
+        // FIXED: Appending the exact single file object (.files[0]) instead of the whole file list object
+        if (ipaInput.files.length > 0) formData.append('ipa', ipaInput.files[0]);
+        if (provInput.files.length > 0) formData.append('prov', provInput.files[0]);
+        if (p12Input.files.length > 0) formData.append('p12', p12Input.files[0]);
+        
+        formData.append('password', document.getElementById('password').value);
+        formData.append('appName', document.getElementById('appName').value);
+        formData.append('bundleId', document.getElementById('bundleId').value);
+        formData.append('stripEntitlements', document.getElementById('stripEntitlements').checked);
+
+        const tweakFiles = document.getElementById('tweaks').files;
+        for (let i = 0; i < tweakFiles.length; i++) {
+            formData.append('tweaks', tweakFiles[i]);
+        }
+
+        submitBtn.disabled = true;
+        progressContainer.style.display = 'block';
+        progressContainer.style.borderColor = 'var(--border)';
+        progressStage.innerText = "Network Stream Upload...";
+        progressBar.style.width = '0%';
+        progressPercent.innerText = '0%';
+        statusText.innerText = "Pushing assets into secure instance directory... Please keep this tab open.";
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/sign', true);
+
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+                const percent = Math.round((event.loaded / event.total) * 100);
+                progressBar.style.width = percent + '%';
+                progressPercent.innerText = percent + '%';
+                if (percent === 100) {
+                    progressStage.innerText = "Executing Cryptographic Signature Checks...";
+                    statusText.innerText = "zsign engine actively restructuring bundle binaries. Do not close tab.";
+                    progressBar.style.width = '100%';
+                    progressBar.style.backgroundColor = 'var(--warning)';
+                }
+            }
+        });
+
+        xhr.onload = function() {
+            let result;
+            try { result = JSON.parse(xhr.responseText); } catch(err) { result = {}; }
+
+            if (xhr.status === 200 && result.status === 'success') {
+                progressBar.style.backgroundColor = 'var(--success)';
+                progressStage.innerText = "Pipeline Execution Finalized";
+                progressContainer.style.borderColor = 'var(--success)';
+                progressContainer.innerHTML = `
+                    <p style="color: var(--success); font-weight:600; margin-bottom: 8px; font-size:14px;">✓ Container Pipeline Succeeded!</p>
+                    <p style="color: var(--text-muted); font-size:11px; margin-bottom: 12px;">Storage tracking rules will clear cache instantly post download, or automatically wipe tracking contexts in 15 minutes.</p>
+                    <div class="actions-box">
+                        <a href="${result.install_url}" class="btn-action btn-install">Install Instantly (OTA)</a>
+                        <a href="${result.download_url}" class="btn-action btn-download" target="_blank">Download Custom signed .IPA</a>
+                    </div>
+                `;
+            } else {
+                handleError(result.details || "Signing process terminated unexpectedly.");
+            }
+            submitBtn.disabled = false;
+        };
+
+        xhr.onerror = function() {
+            handleError("A critical socket exception or network disconnect event occurred.");
+            submitBtn.disabled = false;
+        };
+
+        function handleError(message) {
+            progressContainer.style.borderColor = '#ef4444';
+            progressBar.style.backgroundColor = '#ef4444';
+            progressStage.innerText = "Pipeline Exception Encountered";
+            statusText.innerHTML = `<span style="color: #ef4444; font-weight:600;">Error: ${message}</span>`;
+        }
+
+        xhr.send(formData);
+    });
+</script>
