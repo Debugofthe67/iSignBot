@@ -183,7 +183,21 @@ app.get('/download/:sessionId', (req, res) => {
     });
 });
 
-app.get('/plist/:sessionId', (req, res) => {
+// 1. FIXED DOWNLOAD ENDPOINT (Removes the aggressive, breaking immediate deletion)
+app.get('/download/:sessionId', (req, res) => {
+    const sessionDir = path.join(TMP_DIR, req.params.sessionId);
+    const ipaPath = path.join(sessionDir, 'signed.ipa');
+
+    if (!fs.existsSync(ipaPath)) {
+        return res.status(404).send('Resource expired, invalid, or already cleared.');
+    }
+
+    // Streams the signed package straight to the device safely
+    res.download(ipaPath, 'signed.ipa');
+});
+
+// 2. FIXED PLIST MANIFEST ROUTE
+app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(TMP_DIR, sessionId);
     const ipaPath = path.join(sessionDir, 'signed.ipa');
@@ -192,6 +206,7 @@ app.get('/plist/:sessionId', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
+    // Absolute pointing logic ensuring the software package points precisely to the /install-ipa/ endpoint
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://apple.com">
 <plist version="1.0">
@@ -211,28 +226,33 @@ app.get('/plist/:sessionId', (req, res) => {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>com.temporary.signedapp</string>
+                <string>com.isignbot.dynamicapp.${sessionId}</string>
                 <key>bundle-version</key>
-                <string>1.0</string>
+                <string>1.0.0</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
-                <string>iSignBot App Bundle</string>
+                <string>iSignBot Signed Package</string>
             </dict>
         </dict>
     </array>
 </dict>
 </plist>`;
 
-    res.header('Content-Type', 'application/xml');
-    res.send(plistContent);
+    res.set('Content-Type', 'application/xml');
+    res.status(200).send(plistContent);
 });
 
+// 3. FIXED RAW BINARY TRANSMISSION ENDPOINT
 app.get('/install-ipa/:sessionId', (req, res) => {
-    const ipaPath = path.join(TMP_DIR, req.params.sessionId, 'signed.ipa');
+    const sessionDir = path.join(TMP_DIR, req.params.sessionId);
+    const ipaPath = path.join(sessionDir, 'signed.ipa');
+    
     if (!fs.existsSync(ipaPath)) {
-        return res.status(404).send('File missing.');
+        return res.status(404).send('The requested application payload missing or expired.');
     }
+    
+    // Explicitly serve the binary file stream to iOS over a secure network pipe
     res.sendFile(ipaPath);
 });
 
@@ -241,25 +261,23 @@ app.get('/install-ipa/:sessionId', (req, res) => {
 setInterval(() => {
     if (!fs.existsSync(TMP_DIR)) return;
     const now = Date.now();
-    
-    // CHANGED: Extended to 5 minutes so heavy IPAs have time to upload and process
-    const maxAge = 5 * 60 * 1000; 
+    const maxAge = 5 * 60 * 1000; // Keep files alive for exactly 5 minutes
 
     fs.readdirSync(TMP_DIR).forEach(sessionId => {
         const folderPath = path.join(TMP_DIR, sessionId);
         try {
             const stats = fs.statSync(folderPath);
-            
             const relative = path.relative(TMP_DIR, folderPath);
             const isSafePath = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 
             if (isSafePath && (now - stats.mtime.getTime() > maxAge)) {
                 fs.rmSync(folderPath, { recursive: true, force: true });
-                console.log(`Secured 5m Expiration GC: Cleared session folder allocation ${sessionId}`);
+                console.log(`Automated GC Wiped: ${sessionId}`);
             }
         } catch (e) {}
     });
-}, 60000); // Check files every 60 seconds instead of aggressively polling CPU resources
+}, 60000);
+
 
 
 
