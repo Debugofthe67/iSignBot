@@ -237,10 +237,13 @@ app.get('/install-ipa/:sessionId', (req, res) => {
 });
 
 // Replace just the setInterval section at the bottom of server.js with this:
+// Locate this block at the very bottom of your server.js and change the timings:
 setInterval(() => {
     if (!fs.existsSync(TMP_DIR)) return;
     const now = Date.now();
-    const maxAge = 30 * 1000; // KEEP: Force expire files older than 30 seconds
+    
+    // CHANGED: Extended to 5 minutes so heavy IPAs have time to upload and process
+    const maxAge = 5 * 60 * 1000; 
 
     fs.readdirSync(TMP_DIR).forEach(sessionId => {
         const folderPath = path.join(TMP_DIR, sessionId);
@@ -252,11 +255,12 @@ setInterval(() => {
 
             if (isSafePath && (now - stats.mtime.getTime() > maxAge)) {
                 fs.rmSync(folderPath, { recursive: true, force: true });
-                console.log(`Secured 30s Expiration GC: Removed session folder allocation ${sessionId}`);
+                console.log(`Secured 5m Expiration GC: Cleared session folder allocation ${sessionId}`);
             }
         } catch (e) {}
     });
-}, 120000); // FIXED: Changed from 5000 to 120000 to free up the CPU during startup
+}, 60000); // Check files every 60 seconds instead of aggressively polling CPU resources
+
 
 
 app.listen(PORT, () => {
