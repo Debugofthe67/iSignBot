@@ -158,12 +158,14 @@ app.post('/sign', initSession, upload.fields([
             return res.status(500).json({ error: 'Signing failure.', details: 'The compiled zsign binary failed to write an output file.' });
         }
 
-        res.json({
-            status: 'success',
-            sessionId: sessionId,
-            download_url: `${SERVER_URL}/download/${sessionId}`,
-            install_url: `itms-services://?action=download-manifest&url=${SERVER_URL}/plist/${sessionId}`
-        });
+// REPLACE IT WITH THIS CORRECTED BLOCK:
+res.json({
+    status: 'success',
+    sessionId: sessionId,
+    download_url: `${SERVER_URL}/download/${sessionId}/signed.ipa`,
+    install_url: `itms-services://?action=download-manifest&url=${SERVER_URL}/plist/${sessionId}/manifest.plist`
+});
+
     });
 });
 
@@ -243,18 +245,19 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     res.status(200).send(plistContent);
 });
 
-// 3. FIXED RAW BINARY TRANSMISSION ENDPOINT
-app.get('/install-ipa/:sessionId', (req, res) => {
+// FIXED: Appended /signed.ipa to the route pattern so it matches the new link
+app.get('/download/:sessionId/signed.ipa', (req, res) => {
     const sessionDir = path.join(TMP_DIR, req.params.sessionId);
     const ipaPath = path.join(sessionDir, 'signed.ipa');
-    
+
     if (!fs.existsSync(ipaPath)) {
-        return res.status(404).send('The requested application payload missing or expired.');
+        return res.status(404).send('The requested signed app has expired or was already cleared.');
     }
-    
-    // Explicitly serve the binary file stream to iOS over a secure network pipe
-    res.sendFile(ipaPath);
+
+    // Streams the file straight to your phone with its proper filename layout
+    res.download(ipaPath, 'signed.ipa');
 });
+
 
 // Replace just the setInterval section at the bottom of server.js with this:
 // Locate this block at the very bottom of your server.js and change the timings:
