@@ -208,6 +208,7 @@ app.get('/download/:sessionId', (req, res) => {
 // 2. FIXED PLIST MANIFEST ROUTE
 // REPLACE your old manifest.plist endpoint entirely with this architecture fix:
 // REPLACE your old /plist/:sessionId/manifest.plist route with this exact dynamic matching engine:
+// REPLACE your old /plist/:sessionId/manifest.plist endpoint entirely with this:
 app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(TMP_DIR, sessionId);
@@ -217,60 +218,83 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
-    // FIXED: Prefixed with global. to cleanly match your master scope database registry
+    // Pull user inputs from the tracker cache fallback map database
     const cachedMeta = global.sessionMetadataStore[sessionId] || { customAppName: '', customBundleId: '' };
     
     let finalBundleId = cachedMeta.customBundleId;
     let finalAppTitle = cachedMeta.customAppName;
+    let finalAppVersion = "1.0.0"; // Safe backstop default layout
 
     // =========================================================================
-    // DYNAMIC MATCHING ENGINE: Uses zsign to force a 100% accurate file match
+    // DYNAMIC DEEP SCANNED EXTRACTION PIPELINE
     // =========================================================================
-    if (!finalBundleId || !finalAppTitle) {
-        try {
-            const inspectDir = path.join(sessionDir, 'inspect_plist');
-            if (fs.existsSync(inspectDir)) fs.rmSync(inspectDir, { recursive: true, force: true });
-            fs.mkdirSync(inspectDir, { recursive: true });
+    try {
+        const inspectDir = path.join(sessionDir, 'deep_inspect_plist');
+        if (fs.existsSync(inspectDir)) fs.rmSync(inspectDir, { recursive: true, force: true });
+        fs.mkdirSync(inspectDir, { recursive: true });
 
-            // 1. Unzip the already signed IPA to a temporary folder to check its metadata
-            execSync(`unzip -q "${ipaPath}" -d "${inspectDir}"`);
+        // 1. Unzip the already signed .IPA natively into our temporary deep-scan workspace
+        execSync(`unzip -q "${ipaPath}" -d "${inspectDir}"`);
+        
+        // 2. RECURSIVE SCANNER: Digs through all nested Payload folders to locate the main Info.plist
+        const locateMainAppMetadata = (currentDir) => {
+            const files = fs.readdirSync(currentDir);
             
-            const payloadPath = path.join(inspectDir, 'Payload');
-            const appFolder = fs.readdirSync(payloadPath).find(f => f.endsWith('.app'));
-            const plistPath = path.join(payloadPath, appFolder, 'Info.plist');
-            
-            // 2. Read the raw Info.plist file as text to avoid broken system parser dependencies
-            const plistContentText = fs.readFileSync(plistPath, 'utf8');
+            for (let file of files) {
+                const fullPath = path.join(currentDir, file);
+                const stat = fs.statSync(fullPath);
+                
+                if (stat.isDirectory()) {
+                    locateMainAppMetadata(fullPath);
+                } else if (file === 'Info.plist') {
+                    // Lock strictly onto the primary parent .app folder to exclude plug-ins
+                    if (currentDir.endsWith('.app') && currentDir.includes('Payload/')) {
+                        const plistText = fs.readFileSync(fullPath, 'utf8');
 
-            // 3. Extract the CFBundleIdentifier value via text matching pattern rules
-            if (!finalBundleId) {
-                const idMatch = plistContentText.match(/<key>CFBundleIdentifier<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                if (idMatch && idMatch[1]) finalBundleId = idMatch[1].trim();
-            }
+                        // Extract the exact CFBundleIdentifier
+                        if (!finalBundleId) {
+                            const idMatch = plistText.match(/<key>CFBundleIdentifier<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                            if (idMatch && idMatch[1]) finalBundleId = idMatch[1].trim();
+                        }
 
-            // 4. Extract the CFBundleDisplayName or CFBundleName value via text matching pattern rules
-            if (!finalAppTitle) {
-                let nameMatch = plistContentText.match(/<key>CFBundleDisplayName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                if (!nameMatch) {
-                    nameMatch = plistContentText.match(/<key>CFBundleName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                        // Extract the exact CFBundleDisplayName or CFBundleName
+                        if (!finalAppTitle) {
+                            let nameMatch = plistText.match(/<key>CFBundleDisplayName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                            if (!nameMatch) {
+                                nameMatch = plistText.match(/<key>CFBundleName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                            }
+                            if (nameMatch && nameMatch[1]) finalAppTitle = nameMatch[1].trim();
+                        }
+
+                        // FIXED: Dynamically extracts the exact CFBundleShortVersionString matching target keys
+                        const versionMatch = plistText.match(/<key>CFBundleShortVersionString<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                        if (versionMatch && versionMatch[1]) {
+                            finalAppVersion = versionMatch[1].trim();
+                        }
+                    }
                 }
-                if (nameMatch && nameMatch[1]) finalAppTitle = nameMatch[1].trim();
             }
+        };
 
-            // 5. CRITICAL: Wipe out the temporary folder immediately to save memory. 
-            // We DO NOT zip it back, because your original signed.ipa is perfectly preserved!
-            fs.rmSync(inspectDir, { recursive: true, force: true });
-
-        } catch (extractErr) {
-            console.error("Info.plist manual extraction failed:", extractErr.message);
+        // Launch deep scan profile iteration rules
+        const payloadRoot = path.join(inspectDir, 'Payload');
+        if (fs.existsSync(payloadRoot)) {
+            locateMainAppMetadata(payloadRoot);
         }
+
+        // 3. SECURE CLEANUP: Wipe out the temporary folder immediately to save memory.
+        fs.rmSync(inspectDir, { recursive: true, force: true });
+
+    } catch (extractErr) {
+        console.error("Deep Info.plist extraction failure:", extractErr.message);
     }
 
-    // Unbreakable safety defaults if string parsing fails
+    // Emergency backstops if the parsing logic encounters irregular formatting variations
     if (!finalBundleId) finalBundleId = "com.isignbot.signedapp";
     if (!finalAppTitle) finalAppTitle = "iSignBot Signed Package";
+    // =========================================================================
 
-    // DYNAMIC PLIST STRING: Guarantees a flawless, 100% true identity match to your signed binary profile
+    // DYNAMIC MANIFEST TEMPLATE: Fully matched to bundle identities, files paths, and version tags!
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://apple.com">
 <plist version="1.0">
@@ -291,8 +315,9 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
             <dict>
                 <key>bundle-identifier</key>
                 <string>${finalBundleId}</string>
+                <!-- FIXED: Receives the true compiled CFBundleShortVersionString from the scanner payload -->
                 <key>bundle-version</key>
-                <string>1.0.0</string>
+                <string>${finalAppVersion}</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
