@@ -221,10 +221,8 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
-    // Pull verified text parameters instantly out of your global memory cache maps
     const cachedMeta = global.sessionMetadataStore[sessionId];
 
-    // If a lookup fails or fields are missing, terminate early so you see it instantly in the Render dashboard logs
     if (!cachedMeta || !cachedMeta.customBundleId || !cachedMeta.customAppName) {
         return res.status(400).send('Metadata extraction pipeline unresolved or missing values.');
     }
@@ -270,9 +268,7 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     res.status(200).send(plistContent);
 });
 
-// =========================================================================
-// FIXED: COMPATIBLE OTA BINARY CONNECTOR PIPELINE
-// =========================================================================
+// COMPATIBLE OTA BINARY CONNECTOR PIPELINE
 app.get('/install-ipa/:sessionId/signed.ipa', (req, res) => {
     const ipaPath = path.join(TMP_DIR, req.params.sessionId, 'signed.ipa');
     if (!fs.existsSync(ipaPath)) {
@@ -282,14 +278,11 @@ app.get('/install-ipa/:sessionId/signed.ipa', (req, res) => {
     res.sendFile(ipaPath);
 });
 
-
-
-// Replace just the setInterval section at the bottom of server.js with this:
-// Locate this block at the very bottom of your server.js and change the timings:
+// SAFE 5-MINUTE AUTOMATED EXPIRATION PURGER
 setInterval(() => {
     if (!fs.existsSync(TMP_DIR)) return;
     const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // Keep files alive for exactly 5 minutes
+    const maxAge = 5 * 60 * 1000; 
 
     fs.readdirSync(TMP_DIR).forEach(sessionId => {
         const folderPath = path.join(TMP_DIR, sessionId);
@@ -300,15 +293,30 @@ setInterval(() => {
 
             if (isSafePath && (now - stats.mtime.getTime() > maxAge)) {
                 fs.rmSync(folderPath, { recursive: true, force: true });
-                console.log(`Automated GC Wiped: ${sessionId}`);
+                delete global.sessionMetadataStore[sessionId];
+                console.log(`Automated GC Wiped expired assets session: ${sessionId}`);
             }
         } catch (e) {}
     });
 }, 60000);
 
-
-
+// GLOBAL ERROR LOGGER
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            if (req.sessionDir && fs.existsSync(req.sessionDir)) {
+                fs.rmSync(req.sessionDir, { recursive: true, force: true });
+            }
+            return res.status(413).json({
+                status: 'error',
+                error: 'Payload Limit Breached',
+                details: 'The uploaded file exceeds our server threshold boundary limits (Max 1GB).'
+            });
+        }
+    }
+    res.status(500).json({ error: 'Internal pipeline error', details: err.message });
+});
 
 app.listen(PORT, () => {
-    console.log(`iSignBot engine actively tracking sockets on port ${PORT}`);
+    console.log(`iSignBot engine online and listening securely via port ${PORT}`);
 });
