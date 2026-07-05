@@ -13,6 +13,7 @@ const SERVER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
 const TMP_DIR = path.resolve('/tmp/zsign_sessions');
 if (!fs.existsSync(TMP_DIR)) {
     fs.mkdirSync(TMP_DIR, { recursive: true });
+    let sessionMetadataStore = {}; 
 }
 
 // Locate this block in server.js and replace it with this dynamic version:
