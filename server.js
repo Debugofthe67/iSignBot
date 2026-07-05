@@ -258,7 +258,7 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
                     <key>kind</key>
                     <string>software-package</string>
                     <key>url</key>
-                    <string>${SERVER_URL}/install-ipa/${sessionId}</string>
+                    <string>${SERVER_URL}/install-ipa/${sessionId}/signed.ipa</string>
                 </dict>
             </array>
             <key>metadata</key>
