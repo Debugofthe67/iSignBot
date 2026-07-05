@@ -158,23 +158,12 @@ app.post('/sign', initSession, upload.fields([
             return res.status(500).json({ error: 'Signing failure.', details: 'The compiled zsign binary failed to write an output file.' });
         }
 
-        // =========================================================================
-        // LINKED ENGINE LOGIC: Connect form fields straight to the global cache store
-        // =========================================================================
-        let finalBundleId = bundleId.trim();
-        let finalAppTitle = appName.trim();
-
-        // Safe backstops: If the user left fields empty, fallback to clean baselines
-        if (finalBundleId === "") finalBundleId = "com.isignbot.signedapp";
-        if (finalAppTitle === "") finalAppTitle = "iSignBot Signed Package";
-
-        // Save these identical strings right into your persistent global tracking database
+        // Cache exclusively the real, un-dummy text values pushed over the network by JSZip
         global.sessionMetadataStore[sessionId] = {
-            customAppName: finalAppTitle,
-            customBundleId: finalBundleId,
-            customVersion: "1.0.0" // Clean uniform version baseline
+            customAppName: appName,
+            customBundleId: bundleId,
+            customVersion: "1.0.0" // Baseline version profile string
         };
-        // =========================================================================
 
         res.json({
             status: 'success',
@@ -220,6 +209,9 @@ app.get('/download/:sessionId', (req, res) => {
 // =========================================================================
 // FIXED: CLEAN MANIFEST PLISt ROUTE GENERATOR (No syntax blocks, no dummy text)
 // =========================================================================
+// =========================================================================
+// FIXED: CLEAN MANIFEST GENERATOR (Perfect bracketing alignment, no dummy loops)
+// =========================================================================
 app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(TMP_DIR, sessionId);
@@ -232,7 +224,7 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     // Pull verified text parameters instantly out of your global memory cache maps
     const cachedMeta = global.sessionMetadataStore[sessionId];
 
-    // If the lookup fails or fields are blank, terminate early so you see it in the Render logs
+    // If a lookup fails or fields are missing, terminate early so you see it instantly in the Render dashboard logs
     if (!cachedMeta || !cachedMeta.customBundleId || !cachedMeta.customAppName) {
         return res.status(400).send('Metadata extraction pipeline unresolved or missing values.');
     }
@@ -289,6 +281,7 @@ app.get('/install-ipa/:sessionId/signed.ipa', (req, res) => {
     res.attachment('signed.ipa');
     res.sendFile(ipaPath);
 });
+
 
 
 // Replace just the setInterval section at the bottom of server.js with this:
