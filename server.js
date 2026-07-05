@@ -145,33 +145,45 @@ app.post('/sign', initSession, upload.fields([
     let zsignCmd = `zsign ${zsignFlags.join(' ')} "${inputIpa}"`;
     console.log("Executing absolute command path:", zsignCmd);
 
+    // REPLACE your old exec callback section with this clean input cacher:
     exec(zsignCmd, (error, stdout, stderr) => {
-        console.log("--- zsign engine stdout ---", stdout);
-        console.error("--- zsign engine stderr ---", stderr);
-
         if (error) {
-            fs.rmSync(sessionDir, { recursive: true, force: true });
-            
-            // Clean up the formatting for readability on your mobile viewport
+            if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
             let shortError = (stderr || stdout || error.message).replace(/\n/g, '<br>');
-            return res.status(500).json({ 
-                error: 'Signing operation rejected by backend binary.', 
-                details: shortError 
-            });
+            return res.status(500).json({ error: 'Signing operation rejected.', details: shortError });
         }
 
         if (!fs.existsSync(outputIpa)) {
-            fs.rmSync(sessionDir, { recursive: true, force: true });
+            if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
             return res.status(500).json({ error: 'Signing failure.', details: 'The compiled zsign binary failed to write an output file.' });
         }
 
-// REPLACE IT WITH THIS CORRECTED BLOCK:
-res.json({
-    status: 'success',
-    sessionId: sessionId,
-    download_url: `${SERVER_URL}/download/${sessionId}/signed.ipa`,
-    install_url: `itms-services://?action=download-manifest&url=${SERVER_URL}/plist/${sessionId}/manifest.plist`
-});
+        // =========================================================================
+        // LINKED ENGINE LOGIC: Connect form fields straight to the global cache store
+        // =========================================================================
+        let finalBundleId = bundleId.trim();
+        let finalAppTitle = appName.trim();
+
+        // Safe backstops: If the user left fields empty, fallback to clean baselines
+        if (finalBundleId === "") finalBundleId = "com.isignbot.signedapp";
+        if (finalAppTitle === "") finalAppTitle = "iSignBot Signed Package";
+
+        // Save these identical strings right into your persistent global tracking database
+        global.sessionMetadataStore[sessionId] = {
+            customAppName: finalAppTitle,
+            customBundleId: finalBundleId,
+            customVersion: "1.0.0" // Clean uniform version baseline
+        };
+        // =========================================================================
+
+        res.json({
+            status: 'success',
+            sessionId: sessionId,
+            download_url: `${SERVER_URL}/download/${sessionId}/signed.ipa`,
+            install_url: `itms-services://?action=download-manifest&url=${SERVER_URL}/plist/${sessionId}/manifest.plist`
+        });
+    });
+
 
     });
 });
@@ -218,48 +230,16 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
-    // Pull user inputs from the tracker cache fallback map database
-    const cachedMeta = global.sessionMetadataStore[sessionId] || { customAppName: '', customBundleId: '' };
-    
-    let finalBundleId = cachedMeta.customBundleId;
-    let finalAppTitle = cachedMeta.customAppName;
-    let finalAppVersion = "1.0.0"; // Safe backstop default layout
+    // FIXED: Pulls the exact same form input data fields straight out of your memory index map!
+    const cachedMeta = global.sessionMetadataStore[sessionId] || { 
+        customAppName: 'iSignBot Signed Package', 
+        customBundleId: 'com.isignbot.signedapp',
+        customVersion: '1.0.0'
+    };
 
-    // =========================================================================
-    // DYNAMIC DEEP SCANNED EXTRACTION PIPELINE
-    // =========================================================================
-  if (!finalBundleId || !finalAppTitle || finalAppVersion === "1.0.0") {
-        try {
-            const archiveFiles = execSync(`unzip -Z -1 "${ipaPath}"`, { encoding: 'utf8' });
-            
-            const fileLines = archiveFiles.split('\n');
-            const mainPlistPath = fileLines.find(line => line.includes('Payload/') && line.endsWith('.app/Info.plist'));
-
-            if (mainPlistPath) {
-                const plistText = execSync(`unzip -p "${ipaPath}" "${mainPlistPath.trim()}"`, { encoding: 'utf8' });
-
-                if (!finalBundleId) {
-                    const idMatch = plistText.match(/<key>CFBundleIdentifier<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                    if (idMatch && idMatch[1]) finalBundleId = idMatch[1].trim();
-                }
-
-                if (!finalAppTitle) {
-                    let nameMatch = plistText.match(/<key>CFBundleDisplayName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                    if (!nameMatch) {
-                        nameMatch = plistText.match(/<key>CFBundleName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                    }
-                    if (nameMatch && nameMatch[1]) finalAppTitle = nameMatch[1].trim();
-                }
-
-                const versionMatch = plistText.match(/<key>CFBundleShortVersionString<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
-                if (versionMatch && versionMatch[1]) {
-                    finalAppVersion = versionMatch[1].trim();
-                }
-            }
-        } catch (extractErr) {
-            console.error("Memory-safe plist extraction failed:", extractErr.message);
-        }
-    }
+    const finalBundleId = cachedMeta.customBundleId;
+    const finalAppTitle = cachedMeta.customAppName;
+    const finalAppVersion = cachedMeta.customVersion;
 
 
 
