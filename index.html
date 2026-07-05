@@ -12,6 +12,7 @@
     <link rel="apple-touch-icon" href="/icon.png">
     <meta name="google-site-verification" content="oUkbbuzkuLd74KUHHQRxnGvz4xy_-rEX2rw7xP-IJP0" />
     <meta name="robots" content="noindex, nofollow">
+     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     
 
     <style>
@@ -132,137 +133,195 @@
     </div>
 </div>
 
-<script>
-    const setupLabelSync = (inputId, labelId, defaultText) => {
-        const input = document.getElementById(inputId);
-        const label = document.getElementById(labelId);
-        if (!input || !label) return;
-        
-        ['dragenter', 'dragover'].forEach(name => {
-            input.addEventListener(name, () => input.parentElement.classList.add('dragover'));
-        });
-        ['dragleave', 'drop'].forEach(name => {
-            input.addEventListener(name, () => input.parentElement.classList.remove('dragover'));
-        });
+    <!-- ========================================================================= -->
+    <!-- COMPLETE FRONTEND MANAGEMENT UTILITY SCRIPT LAYER                         -->
+    <!-- ========================================================================= -->
+    <script>
+        // VARIABLE TRACKER FOR SECURE CLIENT PERSISTENCE
+        let logPollingInterval = null;
 
-        input.addEventListener('change', () => {
-            if (input.files.length === 1) {
-                label.innerText = input.files[0].name;
-                label.style.color = 'var(--accent)';
-            } else if (input.files.length > 1) {
-                label.innerText = input.files.length + " tweak files ready";
-                label.style.color = 'var(--warning)';
-            } else {
-                label.innerText = defaultText;
-                label.style.color = 'var(--text-muted)';
-            }
-        });
-    };
+        // FUNCTION 1: Synchronizes drag-and-drop boxes with user filename strings
+        const setupLabelSync = (inputId, labelId, defaultText) => {
+            const input = document.getElementById(inputId);
+            const label = document.getElementById(labelId);
+            if (!input || !label) return;
+            
+            // Add visual border highlight when a file is hovering over the input element
+            ['dragenter', 'dragover'].forEach(name => {
+                input.addEventListener(name, () => input.parentElement.classList.add('dragover'));
+            });
+            ['dragleave', 'drop'].forEach(name => {
+                input.addEventListener(name, () => input.parentElement.classList.remove('dragover'));
+            });
 
-    setupLabelSync('ipa', 'ipa-label', 'Drag & drop or tap to browse');
-    setupLabelSync('prov', 'prov-label', 'Drop profile');
-    setupLabelSync('p12', 'p12-label', 'Drop cert');
-    setupLabelSync('tweaks', 'tweaks-label', 'Select multiple files if needed (Optional)');
-
-    const entLabel = document.getElementById('entitleLabel');
-    if (entLabel) {
-        entLabel.addEventListener('click', () => {
-            const cb = document.getElementById('stripEntitlements');
-            if (cb) cb.click();
-        });
-    }
-
-    document.getElementById('signForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const submitBtn = document.getElementById('submitBtn');
-        const progressContainer = document.getElementById('progressContainer');
-        const progressBar = document.getElementById('progressBar');
-        const progressPercent = document.getElementById('progressPercent');
-        const progressStage = document.getElementById('progressStage');
-        const statusText = document.getElementById('statusText');
-
-        const formData = new FormData();
-        const ipaInput = document.getElementById('ipa');
-        const provInput = document.getElementById('prov');
-        const p12Input = document.getElementById('p12');
-
-        // FIXED: Appending the exact single file object (.files[0]) instead of the whole file list object
-        if (ipaInput.files.length > 0) formData.append('ipa', ipaInput.files[0]);
-        if (provInput.files.length > 0) formData.append('prov', provInput.files[0]);
-        if (p12Input.files.length > 0) formData.append('p12', p12Input.files[0]);
-        
-        formData.append('password', document.getElementById('password').value);
-        formData.append('appName', document.getElementById('appName').value);
-        formData.append('bundleId', document.getElementById('bundleId').value);
-        formData.append('stripEntitlements', document.getElementById('stripEntitlements').checked);
-
-        const tweakFiles = document.getElementById('tweaks').files;
-        for (let i = 0; i < tweakFiles.length; i++) {
-            formData.append('tweaks', tweakFiles[i]);
-        }
-
-        submitBtn.disabled = true;
-        progressContainer.style.display = 'block';
-        progressContainer.style.borderColor = 'var(--border)';
-        progressStage.innerText = "Network Stream Upload...";
-        progressBar.style.width = '0%';
-        progressPercent.innerText = '0%';
-        statusText.innerText = "Pushing assets into secure instance directory... Please keep this tab open.";
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/sign', true);
-
-        xhr.upload.addEventListener('progress', (event) => {
-            if (event.lengthComputable) {
-                const percent = Math.round((event.loaded / event.total) * 100);
-                progressBar.style.width = percent + '%';
-                progressPercent.innerText = percent + '%';
-                if (percent === 100) {
-                    progressStage.innerText = "Executing Cryptographic Signature Checks...";
-                    statusText.innerText = "zsign engine actively restructuring bundle binaries. Do not close tab.";
-                    progressBar.style.width = '100%';
-                    progressBar.style.backgroundColor = 'var(--warning)';
+            input.addEventListener('change', () => {
+                if (input.files.length === 1) {
+                    label.innerText = input.files[0].name;
+                    label.style.color = 'var(--accent)';
+                } else if (input.files.length > 1) {
+                    label.innerText = input.files.length + " tweak files ready";
+                    label.style.color = 'var(--warning)';
+                } else {
+                    label.innerText = defaultText;
+                    label.style.color = 'var(--text-muted)';
                 }
+            });
+        };
+
+        // Initialize label sync tracking on user interface assets
+        setupLabelSync('ipa', 'ipa-label', 'Drag & drop or tap to browse');
+        setupLabelSync('prov', 'prov-label', 'Drop profile');
+        setupLabelSync('p12', 'p12-label', 'Drop cert');
+        setupLabelSync('tweaks', 'tweaks-label', 'Select multiple files if needed (Optional)');
+
+        // FUNCTION 2: FAST CLIENT-SIDE AUTOMATED IPA PROP EXTRACTOR LOOPS
+        document.getElementById('ipa').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            const appNameInput = document.getElementById('appName');
+            const bundleIdInput = document.getElementById('bundleId');
+            
+            if (!file) return;
+
+            try {
+                // Initialize the browser-based JSZip virtual compilation engine
+                const zip = await JSZip.loadAsync(file);
+                
+                // Track down the primary Info.plist string file inside the hidden Payload directory map
+                const plistEntry = Object.keys(zip.files).find(path => path.includes('Payload/') && path.endsWith('.app/Info.plist'));
+                
+                if (plistEntry) {
+                    // Stream exclusively the single tiny plist text file asset into a plain memory string
+                    const plistText = await zip.files[plistEntry].async('string');
+                    
+                    // Run rigorous regex pattern captures to find the true identification keys
+                    const idMatch = plistText.match(/<key>CFBundleIdentifier<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                    let nameMatch = plistText.match(/<key>CFBundleDisplayName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                    if (!nameMatch) {
+                        nameMatch = plistText.match(/<key>CFBundleName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                    }
+
+                    // AUTO-FILL INPUT FIELDS INSTANTLY WITH CLEAN STRING CONTEXTS (Index)
+                    if (idMatch && idMatch[1] && bundleIdInput) {
+                        bundleIdInput.value = idMatch[1].trim();
+                    }
+                    if (nameMatch && nameMatch[1] && appNameInput) {
+                        appNameInput.value = nameMatch[1].trim();
+                    }
+                }
+            } catch (err) {
+                console.error("Client-side metadata extraction failed:", err);
             }
         });
 
-        xhr.onload = function() {
-            let result;
-            try { result = JSON.parse(xhr.responseText); } catch(err) { result = {}; }
-
-            if (xhr.status === 200 && result.status === 'success') {
-                progressBar.style.backgroundColor = 'var(--success)';
-                progressStage.innerText = "Pipeline Execution Finalized";
-                progressContainer.style.borderColor = 'var(--success)';
-                progressContainer.innerHTML = `
-                    <p style="color: var(--success); font-weight:600; margin-bottom: 8px; font-size:14px;">✓ Container Pipeline Succeeded!</p>
-                    <p style="color: var(--text-muted); font-size:11px; margin-bottom: 12px;">Storage tracking rules will clear cache instantly post download, or automatically wipe tracking contexts in 15 minutes.</p>
-                    <div class="actions-box">
-                        <a href="${result.install_url}" class="btn-action btn-install">Install Instantly (OTA)</a>
-                        <a href="${result.download_url}" class="btn-action btn-download" target="_blank">Download Custom signed .IPA</a>
-                    </div>
-                `;
-            } else {
-                handleError(result.details || "Signing process terminated unexpectedly.");
-            }
-            submitBtn.disabled = false;
-        };
-
-        xhr.onerror = function() {
-            handleError("A critical socket exception or network disconnect event occurred.");
-            submitBtn.disabled = false;
-        };
-
-        function handleError(message) {
-            progressContainer.style.borderColor = '#ef4444';
-            progressBar.style.backgroundColor = '#ef4444';
-            progressStage.innerText = "Pipeline Exception Encountered";
-            statusText.innerHTML = `<span style="color: #ef4444; font-weight:600;">Error: ${message}</span>`;
+        // Toggle alignment tracking click listener helper utility
+        const entLabel = document.getElementById('entitleLabel');
+        if (entLabel) {
+            entLabel.addEventListener('click', () => {
+                const cb = document.getElementById('stripEntitlements');
+                if (cb) cb.click();
+            });
         }
 
-        xhr.send(formData);
-    });
-</script>
+        // FUNCTION 3: CORE NETWORK MULTIPART STREAM PIPELINE EXECUTIONS
+        document.getElementById('signForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressStage = document.getElementById('progressStage');
+            const statusText = document.getElementById('statusText');
+            const successActions = document.getElementById('successActions');
+
+            const formData = new FormData();
+            const ipaInput = document.getElementById('ipa');
+            const provInput = document.getElementById('prov');
+            const p12Input = document.getElementById('p12');
+
+            // Force index mapping rules to maintain strict multipart backend compatibility
+            if (ipaInput.files.length > 0) formData.append('ipa', ipaInput.files[0]);
+            if (provInput.files.length > 0) formData.append('prov', provInput.files[0]);
+            if (p12Input.files.length > 0) formData.append('p12', p12Input.files[0]);
+            
+            formData.append('password', document.getElementById('password').value);
+            formData.append('appName', document.getElementById('appName').value);
+            formData.append('bundleId', document.getElementById('bundleId').value);
+            formData.append('stripEntitlements', document.getElementById('stripEntitlements').checked);
+
+            const tweakFiles = document.getElementById('tweaks').files;
+            for (let i = 0; i < tweakFiles.length; i++) {
+                formData.append('tweaks', tweakFiles[i]);
+            }
+
+            submitBtn.disabled = true;
+            if(successActions) successActions.style.display = 'none'; 
+            progressContainer.style.display = 'block';
+            progressContainer.style.borderColor = 'var(--border)';
+            progressStage.innerText = "Network Stream Upload...";
+            progressBar.style.width = '0%';
+            progressPercent.innerText = '0%';
+            statusText.innerText = "Pushing assets into secure instance directory...";
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/sign', true);
+
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressPercent.innerText = percent + '%';
+                    if (percent === 100) {
+                        progressStage.innerText = "Executing Cryptographic Signatures...";
+                        statusText.innerText = "zsign engine actively restructuring bundle binaries. Do not close tab.";
+                        progressBar.style.width = '100%';
+                        progressBar.style.backgroundColor = 'var(--warning)';
+                    }
+                }
+            });
+
+            xhr.onload = function() {
+                let result;
+                try { result = JSON.parse(xhr.responseText); } catch(err) { result = {}; }
+
+                if (xhr.status === 200 && result.status === 'success') {
+                    progressBar.style.backgroundColor = 'var(--success)';
+                    progressStage.innerText = "Pipeline Execution Finalized";
+                    progressContainer.style.borderColor = 'var(--success)';
+                    statusText.innerText = "App deployment endpoints mapped successfully.";
+                    
+                    const otaLink = document.getElementById('otaInstallLink');
+                    const rawLink = document.getElementById('rawDownloadLink');
+                    
+                    if (otaLink && rawLink && successActions) {
+                        // Inject working URLs directly onto persistent DOM tree objects
+                        otaLink.setAttribute('href', result.install_url);
+                        rawLink.setAttribute('href', result.download_url);
+                        
+                        // Reveal the static actions layout panel smoothly
+                        successActions.style.display = 'flex';
+                    }
+                } else {
+                    handleError(result.details || "Signing process terminated unexpectedly.");
+                }
+                submitBtn.disabled = false;
+            };
+
+            xhr.onerror = function() {
+                handleError("A critical network connection error or server socket drop occurred.");
+                submitBtn.disabled = false;
+            };
+
+            function handleError(message) {
+                progressContainer.style.borderColor = '#ef4444';
+                progressBar.style.backgroundColor = '#ef4444';
+                progressStage.innerText = "Pipeline Exception Encountered";
+                statusText.innerHTML = `<span style="color: #ef4444; font-weight:600;">Error: ${message}</span>`;
+            }
+
+            xhr.send(formData);
+        });
+    </script>
+
 </body>
 </html>
