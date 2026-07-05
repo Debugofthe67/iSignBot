@@ -284,7 +284,7 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
 });
 
 
-// FIXED: Appended /signed.ipa to the route pattern so it matches the new link
+// FIXED: Re-enforces your exact original stable manual browser download mechanics
 app.get('/download/:sessionId/signed.ipa', (req, res) => {
     const sessionDir = path.join(TMP_DIR, req.params.sessionId);
     const ipaPath = path.join(sessionDir, 'signed.ipa');
