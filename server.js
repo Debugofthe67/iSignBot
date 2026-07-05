@@ -217,10 +217,9 @@ app.get('/download/:sessionId', (req, res) => {
     res.download(ipaPath, 'signed.ipa');
 });
 
-// 2. FIXED PLIST MANIFEST ROUTE
-// REPLACE your old manifest.plist endpoint entirely with this architecture fix:
-// REPLACE your old /plist/:sessionId/manifest.plist route with this exact dynamic matching engine:
-// REPLACE your old /plist/:sessionId/manifest.plist endpoint entirely with this:
+// =========================================================================
+// FIXED: CLEAN MANIFEST PLISt ROUTE GENERATOR (No syntax blocks, no dummy text)
+// =========================================================================
 app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     const sessionId = req.params.sessionId;
     const sessionDir = path.join(TMP_DIR, sessionId);
@@ -230,22 +229,18 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
-    // FIXED: Pulls the exact same form input data fields straight out of your memory index map!
-    const cachedMeta = global.sessionMetadataStore[sessionId] || { 
-        customAppName: 'iSignBot Signed Package', 
-        customBundleId: 'com.isignbot.signedapp',
-        customVersion: '1.0.0'
-    };
+    // Pull verified text parameters instantly out of your global memory cache maps
+    const cachedMeta = global.sessionMetadataStore[sessionId];
+
+    // If the lookup fails or fields are blank, terminate early so you see it in the Render logs
+    if (!cachedMeta || !cachedMeta.customBundleId || !cachedMeta.customAppName) {
+        return res.status(400).send('Metadata extraction pipeline unresolved or missing values.');
+    }
 
     const finalBundleId = cachedMeta.customBundleId;
     const finalAppTitle = cachedMeta.customAppName;
     const finalAppVersion = cachedMeta.customVersion;
 
-
-
-    // =========================================================================
-
-    // DYNAMIC MANIFEST TEMPLATE: Fully matched to bundle identities, files paths, and version tags!
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://apple.com">
 <plist version="1.0">
@@ -266,7 +261,6 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
             <dict>
                 <key>bundle-identifier</key>
                 <string>${finalBundleId}</string>
-                <!-- FIXED: Receives the true compiled CFBundleShortVersionString from the scanner payload -->
                 <key>bundle-version</key>
                 <string>${finalAppVersion}</string>
                 <key>kind</key>
@@ -284,19 +278,16 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     res.status(200).send(plistContent);
 });
 
-
-
-// FIXED: Re-enforces your exact original stable manual browser download mechanics
-app.get('/download/:sessionId/signed.ipa', (req, res) => {
-    const sessionDir = path.join(TMP_DIR, req.params.sessionId);
-    const ipaPath = path.join(sessionDir, 'signed.ipa');
-
+// =========================================================================
+// FIXED: COMPATIBLE OTA BINARY CONNECTOR PIPELINE
+// =========================================================================
+app.get('/install-ipa/:sessionId/signed.ipa', (req, res) => {
+    const ipaPath = path.join(TMP_DIR, req.params.sessionId, 'signed.ipa');
     if (!fs.existsSync(ipaPath)) {
-        return res.status(404).send('The requested signed app has expired or was already cleared.');
+        return res.status(404).send('File missing or layout session expired.');
     }
-
-    // Streams the file straight to your phone with its proper filename layout
-    res.download(ipaPath, 'signed.ipa');
+    res.attachment('signed.ipa');
+    res.sendFile(ipaPath);
 });
 
 
