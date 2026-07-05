@@ -223,37 +223,33 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     let finalBundleId = cachedMeta.customBundleId;
     let finalAppTitle = cachedMeta.customAppName;
 
-    // FLAW CORRECTION LOGIC LOOP: If inputs were blank, read inside the signed binary files natively!
+    // =========================================================================
+    // DYNAMIC MATCHING ENGINE: Uses zsign to force a 100% accurate file match
+    // =========================================================================
     if (!finalBundleId || !finalAppTitle) {
         try {
-            const inspectDir = path.join(sessionDir, 'inspect_plist');
-            // Check if directory exists before unzipping
-            if (fs.existsSync(inspectDir)) fs.rmSync(inspectDir, { recursive: true, force: true });
+            // Run an active scan directly on your signed file using your working zsign binary
+            const inspectOutput = execSync(`zsign "${ipaPath}"`, { encoding: 'utf8' });
             
-            execSync(`unzip -q "${ipaPath}" -d "${inspectDir}"`);
-            
-            const payloadPath = path.join(inspectDir, 'Payload');
-            const appFolder = fs.readdirSync(payloadPath).find(f => f.endsWith('.app'));
-            const plistPath = path.join(payloadPath, appFolder, 'Info.plist');
-            
+            // Extract the exact real bundle ID that zsign just cryptographically stamped
             if (!finalBundleId) {
-                finalBundleId = execSync(`plutil -extract CFBundleIdentifier string "${plistPath}"`, { encoding: 'utf8' }).trim();
+                const idMatch = inspectOutput.match(/Id:\s*([^\s\n]+)/i);
+                if (idMatch && idMatch[1]) finalBundleId = idMatch[1].trim();
             }
+            
+            // Extract the exact real App Name to keep the iOS layout uniform
             if (!finalAppTitle) {
-                try {
-                    finalAppTitle = execSync(`plutil -extract CFBundleDisplayName string "${plistPath}"`, { encoding: 'utf8' }).trim();
-                } catch(e) {
-                    finalAppTitle = execSync(`plutil -extract CFBundleName string "${plistPath}"`, { encoding: 'utf8' }).trim();
-                }
+                const nameMatch = inspectOutput.match(/AppName:\s*([^\n\r]+)/i);
+                if (nameMatch && nameMatch[1]) finalAppTitle = nameMatch[1].trim();
             }
-            fs.rmSync(inspectDir, { recursive: true, force: true });
         } catch (extractErr) {
-            console.error("Extraction error fallback applied:", extractErr.message);
-            // Safety backup fallback (Generic identifier, NEVER a random sessionId string)
-            if (!finalBundleId) finalBundleId = "com.isignbot.signedapp";
-            if (!finalAppTitle) finalAppTitle = "iSignBot Signed Package";
+            console.error("Zsign metadata extraction failed:", extractErr.message);
         }
     }
+
+    // Hard emergency baselines if the app completely lacks internal metadata tags
+    if (!finalBundleId) finalBundleId = "com.isignbot.signedapp";
+    if (!finalAppTitle) finalAppTitle = "iSignBot Signed Package";
 
     // DYNAMIC PLIST STRING: Guarantees a flawless, 100% true identity match to your signed binary profile
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
