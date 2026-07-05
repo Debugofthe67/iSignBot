@@ -4,6 +4,7 @@ const { execSync, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+global.sessionMetadataStore = {};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +84,11 @@ app.post('/sign', initSession, upload.fields([
     const prov = path.join(sessionDir, 'embedded.mobileprovision');
     const p12 = path.join(sessionDir, 'cert.p12');
     const tweaksFolder = path.join(sessionDir, 'tweaks');
+
+        global.sessionMetadataStore[sessionId] = {
+        customAppName: appName.trim(),
+        customBundleId: bundleId.trim()
+    };
 
     let zsignFlags = [];
     zsignFlags.push(`-k "${p12}"`);
@@ -211,8 +217,8 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
         return res.status(404).send('Session mapping profiles expired or missing.');
     }
 
-    // Pull user inputs from the tracker cache fallback map database
-    const cachedMeta = sessionMetadataStore[sessionId] || { customAppName: '', customBundleId: '' };
+    // FIXED: Prefixed with global. to cleanly match your master scope database registry
+    const cachedMeta = global.sessionMetadataStore[sessionId] || { customAppName: '', customBundleId: '' };
     
     let finalBundleId = cachedMeta.customBundleId;
     let finalAppTitle = cachedMeta.customAppName;
