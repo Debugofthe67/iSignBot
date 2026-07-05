@@ -228,26 +228,45 @@ app.get('/plist/:sessionId/manifest.plist', (req, res) => {
     // =========================================================================
     if (!finalBundleId || !finalAppTitle) {
         try {
-            // Run an active scan directly on your signed file using your working zsign binary
-            const inspectOutput = execSync(`zsign "${ipaPath}"`, { encoding: 'utf8' });
+            const inspectDir = path.join(sessionDir, 'inspect_plist');
+            if (fs.existsSync(inspectDir)) fs.rmSync(inspectDir, { recursive: true, force: true });
+            fs.mkdirSync(inspectDir, { recursive: true });
+
+            // 1. Unzip the already signed IPA to a temporary folder to check its metadata
+            execSync(`unzip -q "${ipaPath}" -d "${inspectDir}"`);
             
-            // Extract the exact real bundle ID that zsign just cryptographically stamped
+            const payloadPath = path.join(inspectDir, 'Payload');
+            const appFolder = fs.readdirSync(payloadPath).find(f => f.endsWith('.app'));
+            const plistPath = path.join(payloadPath, appFolder, 'Info.plist');
+            
+            // 2. Read the raw Info.plist file as text to avoid broken system parser dependencies
+            const plistContentText = fs.readFileSync(plistPath, 'utf8');
+
+            // 3. Extract the CFBundleIdentifier value via text matching pattern rules
             if (!finalBundleId) {
-                const idMatch = inspectOutput.match(/Id:\s*([^\s\n]+)/i);
+                const idMatch = plistContentText.match(/<key>CFBundleIdentifier<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
                 if (idMatch && idMatch[1]) finalBundleId = idMatch[1].trim();
             }
-            
-            // Extract the exact real App Name to keep the iOS layout uniform
+
+            // 4. Extract the CFBundleDisplayName or CFBundleName value via text matching pattern rules
             if (!finalAppTitle) {
-                const nameMatch = inspectOutput.match(/AppName:\s*([^\n\r]+)/i);
+                let nameMatch = plistContentText.match(/<key>CFBundleDisplayName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                if (!nameMatch) {
+                    nameMatch = plistContentText.match(/<key>CFBundleName<\/key>[\s\n\r]*<string>([^<]+)<\/string>/);
+                }
                 if (nameMatch && nameMatch[1]) finalAppTitle = nameMatch[1].trim();
             }
+
+            // 5. CRITICAL: Wipe out the temporary folder immediately to save memory. 
+            // We DO NOT zip it back, because your original signed.ipa is perfectly preserved!
+            fs.rmSync(inspectDir, { recursive: true, force: true });
+
         } catch (extractErr) {
-            console.error("Zsign metadata extraction failed:", extractErr.message);
+            console.error("Info.plist manual extraction failed:", extractErr.message);
         }
     }
 
-    // Hard emergency baselines if the app completely lacks internal metadata tags
+    // Unbreakable safety defaults if string parsing fails
     if (!finalBundleId) finalBundleId = "com.isignbot.signedapp";
     if (!finalAppTitle) finalAppTitle = "iSignBot Signed Package";
 
