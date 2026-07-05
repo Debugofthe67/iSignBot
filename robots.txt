@@ -1,2 +1,5 @@
 User-agent: *
 Disallow: /app/
+Disallow: /download/
+Disallow: /install-ipa/
+Disallow /plist/
